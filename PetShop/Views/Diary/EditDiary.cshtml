@@ -1,6 +1,27 @@
 ﻿@model PetShop.Models.DiaryEntry
 @{
     Layout = "~/Views/Shared/_Layout.cshtml";
+
+    // 計算每單位基礎營養（若有數量則以總值 / 數量作為單位值）
+    int existingQty = Model?.Quantity ?? 0;
+    decimal baseCal = 0M, baseProt = 0M, baseFat = 0M, baseCarb = 0M;
+    if (Model != null)
+    {
+        if (existingQty > 0)
+        {
+            baseCal = (Model.Calories ?? 0M) / existingQty;
+            baseProt = (Model.Protein ?? 0M) / existingQty;
+            baseFat = (Model.Fat ?? 0M) / existingQty;
+            baseCarb = (Model.Carbs ?? 0M) / existingQty;
+        }
+        else
+        {
+            baseCal = Model.Calories ?? 0M;
+            baseProt = Model.Protein ?? 0M;
+            baseFat = Model.Fat ?? 0M;
+            baseCarb = Model.Carbs ?? 0M;
+        }
+    }
 }
 
 <h2 class="mb-4">📔 飲食紀錄</h2>
@@ -24,23 +45,23 @@
             </div>
             <div class="form-group">
                 <label>數量</label>
-                <input type="number" name="Quantity" class="form-control" value="@Model.Quantity" />
+                <input type="number" id="qtyInput" name="Quantity" class="form-control" value="@Model.Quantity" />
             </div>
             <div class="form-group">
                 <label>熱量</label>
-                <input type="number" name="Calories" class="form-control" value="@Model.Calories" step="0.1"/>
+                <input type="number" id="caloriesInput" name="Calories" class="form-control" value="@Model.Calories" step="0.1" data-base="@Math.Round(baseCal, 3)"/>
             </div>
             <div class="form-group">
                 <label>蛋白質</label>
-                <input type="number" name="Protein" class="form-control" value="@Model.Protein" step="0.1"/>
+                <input type="number" id="proteinInput" name="Protein" class="form-control" value="@Model.Protein" step="0.1" data-base="@Math.Round(baseProt, 3)"/>
             </div>
             <div class="form-group">
                 <label>脂肪</label>
-                <input type="number" name="Fat" class="form-control" value="@Model.Fat" step="0.1"/>
+                <input type="number" id="fatInput" name="Fat" class="form-control" value="@Model.Fat" step="0.1" data-base="@Math.Round(baseFat, 3)"/>
             </div>
             <div class="form-group">
                 <label>碳水化合物</label>
-                <input type="number" name="Carbs" class="form-control" value="@Model.Carbs" step="0.1"/>
+                <input type="number" id="carbInput" name="Carbs" class="form-control" value="@Model.Carbs" step="0.1" data-base="@Math.Round(baseCarb, 3)"/>
             </div>
             <button type="submit" class="btn btn-primary">儲存</button>
             @*<a href="@Url.Action("DiaryIndex", "Home")" class="btn btn-secondary">取消</a>*@
@@ -48,3 +69,69 @@
         </form>
     </div>
 </div>
+
+<script>
+    // 當數量改變時，使用每單位 base 值乘以數量更新各營養欄位。
+    // 使用者若直接修改某個營養欄位，會更新該欄位的 base 值（以便後續數量變動正確計算）。
+    (function () {
+        function toFloat(v) {
+            var n = parseFloat(v);
+            return isNaN(n) ? 0 : n;
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            var qtyEl = document.getElementById('qtyInput');
+            var calEl = document.getElementById('caloriesInput');
+            var protEl = document.getElementById('proteinInput');
+            var fatEl = document.getElementById('fatInput');
+            var carbEl = document.getElementById('carbInput');
+
+            if (!qtyEl || !calEl || !protEl || !fatEl || !carbEl) return;
+
+            // 讀取 base（每一份）值
+            var baseCal = toFloat(calEl.dataset.base);
+            var baseProt = toFloat(protEl.dataset.base);
+            var baseFat = toFloat(fatEl.dataset.base);
+            var baseCarb = toFloat(carbEl.dataset.base);
+
+            function applyQtyToFields() {
+                var q = Math.max(1, parseInt(qtyEl.value, 10) || 1);
+                calEl.value = Math.round((baseCal * q) * 10) / 10;
+                protEl.value = Math.round((baseProt * q) * 10) / 10;
+                fatEl.value = Math.round((baseFat * q) * 10) / 10;
+                carbEl.value = Math.round((baseCarb * q) * 10) / 10;
+            }
+
+            // 若使用者在某營養欄位直接修改，更新該欄位的 base 值 = current / qty
+            function updateBaseFromField(fieldEl, setter) {
+                var q = Math.max(1, parseInt(qtyEl.value, 10) || 1);
+                var v = toFloat(fieldEl.value);
+                var newBase = v / q;
+                setter(newBase);
+                // 同步 data-base 屬性
+                fieldEl.dataset.base = newBase;
+            }
+
+            // 綁定事件
+            qtyEl.addEventListener('input', function () {
+                applyQtyToFields();
+            });
+
+            calEl.addEventListener('change', function () {
+                updateBaseFromField(calEl, function (v) { baseCal = v; });
+            });
+            protEl.addEventListener('change', function () {
+                updateBaseFromField(protEl, function (v) { baseProt = v; });
+            });
+            fatEl.addEventListener('change', function () {
+                updateBaseFromField(fatEl, function (v) { baseFat = v; });
+            });
+            carbEl.addEventListener('change', function () {
+                updateBaseFromField(carbEl, function (v) { baseCarb = v; });
+            });
+
+            // 初始應用一次（確保顯示正確）
+            applyQtyToFields();
+        });
+    })();
+</script>

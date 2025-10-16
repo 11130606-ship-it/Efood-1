@@ -372,18 +372,15 @@ namespace PetShop.Controllers
         {
             string Category = Request["Category"]?.ToString();
             string MealType = Request["MealType"]?.ToString();
-            string food = "";
-            if (!string.IsNullOrEmpty(Request["CommonFood"]) && Request["CommonFood"] != "其他")
-                food = Request["CommonFood"];
-            else if (Request["CommonFood"] == "其他")
-                food = Request["FoodOther"];
-            int quantity = 0;
-            int.TryParse(Request["Quantity"], out quantity);
-            decimal calories = 0, protein = 0, fat = 0, carbs = 0;
-            decimal.TryParse(Request["Calories"], out calories);
-            decimal.TryParse(Request["Protein"], out protein);
-            decimal.TryParse(Request["Fat"], out fat);
-            decimal.TryParse(Request["Carbs"], out carbs);
+            string commonFoodField = Request["CommonFood"]?.ToString(); // 格式可能為 "name:qty,name2:qty2" 或單一名稱
+            string otherFood = Request["FoodOther"]?.ToString();
+            int singleQuantity = 0;
+            int.TryParse(Request["Quantity"], out singleQuantity);
+            decimal singleCalories = 0, singleProtein = 0, singleFat = 0, singleCarbs = 0;
+            decimal.TryParse(Request["Calories"], out singleCalories);
+            decimal.TryParse(Request["Protein"], out singleProtein);
+            decimal.TryParse(Request["Fat"], out singleFat);
+            decimal.TryParse(Request["Carbs"], out singleCarbs);
 
             DateTime createTime = DateTime.Now;
             if (!string.IsNullOrEmpty(Request["selectedDateTime"]))
@@ -391,39 +388,165 @@ namespace PetShop.Controllers
                 DateTime.TryParse(Request["selectedDateTime"], out createTime);
             }
 
-            string Response;
+            string account = Session["LoginUser"]?.ToString();
+            if (string.IsNullOrEmpty(account))
+            {
+                TempData["Msg"] = "未登入，無法新增日記";
+                return RedirectToAction("DiaryIndex");
+            }
+
             try
             {
-                string account = Session["LoginUser"]?.ToString();
                 X.Open();
-                string G = "INSERT INTO Diary (Account, Category, Food, Calories, Protein, Fat, Carbs, MealType, Quantity, CreateTime) VALUES (@Account, @Category, @Food, @Calories, @Protein, @Fat, @Carbs, @MealType, @Quantity, @CreateTime)";
 
-                SqlCommand Q = new SqlCommand(G, X);
-                Q.Parameters.AddWithValue("@Account", account);
-                Q.Parameters.AddWithValue("@Category", Category);
-                Q.Parameters.AddWithValue("@Food", food);
-                Q.Parameters.AddWithValue("@Calories", calories);
-                Q.Parameters.AddWithValue("@Protein", protein);
-                Q.Parameters.AddWithValue("@Fat", fat);
-                Q.Parameters.AddWithValue("@Carbs", carbs);
-                Q.Parameters.AddWithValue("@MealType", MealType);
-                Q.Parameters.AddWithValue("@Quantity", quantity);
-                Q.Parameters.AddWithValue("@CreateTime", createTime);
+                // 如果收到多選 (含 ":" 表示 name:qty 格式)，逐筆處理：從 CommonFoods 抓單位營養值並乘上數量後插入 Diary
+                if (!string.IsNullOrEmpty(commonFoodField) && commonFoodField.Contains(":"))
+                {
+                    var pairs = commonFoodField
+                        .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(p => p.Trim())
+                        .Where(p => !string.IsNullOrEmpty(p));
 
-                Q.ExecuteNonQuery();
-                Response = "建立成功";
+                    foreach (var pair in pairs)
+                    {
+                        var parts = pair.Split(new[] { ':' }, StringSplitOptions.RemoveEmptyEntries);
+                        var foodName = parts[0].Trim();
+                        int qty = 1;
+                        if (parts.Length > 1) int.TryParse(parts[1].Trim(), out qty);
+
+                        // 先從 CommonFoods 取得單位營養值
+                        decimal unitCal = 0, unitProt = 0, unitFat = 0, unitCarb = 0;
+                        using (var cmd = new SqlCommand("SELECT Calories, Protein, Fat, Carbs FROM CommonFoods WHERE Name = @Name", X))
+                        {
+                            cmd.Parameters.AddWithValue("@Name", foodName);
+                            using (var rdr = cmd.ExecuteReader())
+                            {
+                                if (rdr.Read())
+                                {
+                                    unitCal = rdr["Calories"] != DBNull.Value ? Convert.ToDecimal(rdr["Calories"]) : 0;
+                                    unitProt = rdr["Protein"] != DBNull.Value ? Convert.ToDecimal(rdr["Protein"]) : 0;
+                                    unitFat = rdr["Fat"] != DBNull.Value ? Convert.ToDecimal(rdr["Fat"]) : 0;
+                                    unitCarb = rdr["Carbs"] != DBNull.Value ? Convert.ToDecimal(rdr["Carbs"]) : 0;
+                                }
+                            }
+                        }
+
+                        // 插入該筆日記（數量為 qty，營養值乘上 qty）
+                        using (var ins = new SqlCommand(@"INSERT INTO Diary 
+                    (Account, Category, Food, Calories, Protein, Fat, Carbs, MealType, Quantity, CreateTime) 
+                    VALUES (@Account, @Category, @Food, @Calories, @Protein, @Fat, @Carbs, @MealType, @Quantity, @CreateTime)", X))
+                        {
+                            ins.Parameters.AddWithValue("@Account", account);
+                            ins.Parameters.AddWithValue("@Category", Category ?? "");
+                            ins.Parameters.AddWithValue("@Food", foodName);
+                            ins.Parameters.AddWithValue("@Calories", unitCal * qty);
+                            ins.Parameters.AddWithValue("@Protein", unitProt * qty);
+                            ins.Parameters.AddWithValue("@Fat", unitFat * qty);
+                            ins.Parameters.AddWithValue("@Carbs", unitCarb * qty);
+                            ins.Parameters.AddWithValue("@MealType", MealType ?? "");
+                            ins.Parameters.AddWithValue("@Quantity", qty);
+                            ins.Parameters.AddWithValue("@CreateTime", createTime);
+                            ins.ExecuteNonQuery();
+                        }
+                    }
+                }
+                else
+                {
+                    // 傳統單一項目處理：CommonFood 可能為單一名稱或 "其他"，使用表單上的 Calories/Quantity 等欄位
+                    string food = "";
+                    if (!string.IsNullOrEmpty(commonFoodField) && commonFoodField != "其他")
+                        food = commonFoodField;
+                    else if (commonFoodField == "其他")
+                        food = otherFood;
+                    else
+                        food = otherFood ?? "";
+
+                    string sql = "INSERT INTO Diary (Account, Category, Food, Calories, Protein, Fat, Carbs, MealType, Quantity, CreateTime) " +
+                                 "VALUES (@Account, @Category, @Food, @Calories, @Protein, @Fat, @Carbs, @MealType, @Quantity, @CreateTime)";
+                    using (var Q = new SqlCommand(sql, X))
+                    {
+                        Q.Parameters.AddWithValue("@Account", account);
+                        Q.Parameters.AddWithValue("@Category", Category ?? "");
+                        Q.Parameters.AddWithValue("@Food", food);
+                        Q.Parameters.AddWithValue("@Calories", singleCalories);
+                        Q.Parameters.AddWithValue("@Protein", singleProtein);
+                        Q.Parameters.AddWithValue("@Fat", singleFat);
+                        Q.Parameters.AddWithValue("@Carbs", singleCarbs);
+                        Q.Parameters.AddWithValue("@MealType", MealType ?? "");
+                        Q.Parameters.AddWithValue("@Quantity", singleQuantity);
+                        Q.Parameters.AddWithValue("@CreateTime", createTime);
+                        Q.ExecuteNonQuery();
+                    }
+                }
             }
             catch (Exception ex)
             {
-                Response = "建立失敗：" + ex.Message;
+                TempData["Msg"] = "建立失敗：" + ex.Message;
             }
             finally
             {
                 X.Close();
             }
-            //TempData["Msg"] = Response;
+
             return RedirectToAction("DiaryIndex");
         }
+
+        //public ActionResult DiaryArea()
+        //{
+        //    string Category = Request["Category"]?.ToString();
+        //    string MealType = Request["MealType"]?.ToString();
+        //    string food = "";
+        //    if (!string.IsNullOrEmpty(Request["CommonFood"]) && Request["CommonFood"] != "其他")
+        //        food = Request["CommonFood"];
+        //    else if (Request["CommonFood"] == "其他")
+        //        food = Request["FoodOther"];
+        //    int quantity = 0;
+        //    int.TryParse(Request["Quantity"], out quantity);
+        //    decimal calories = 0, protein = 0, fat = 0, carbs = 0;
+        //    decimal.TryParse(Request["Calories"], out calories);
+        //    decimal.TryParse(Request["Protein"], out protein);
+        //    decimal.TryParse(Request["Fat"], out fat);
+        //    decimal.TryParse(Request["Carbs"], out carbs);
+
+        //    DateTime createTime = DateTime.Now;
+        //    if (!string.IsNullOrEmpty(Request["selectedDateTime"]))
+        //    {
+        //        DateTime.TryParse(Request["selectedDateTime"], out createTime);
+        //    }
+
+        //    string Response;
+        //    try
+        //    {
+        //        string account = Session["LoginUser"]?.ToString();
+        //        X.Open();
+        //        string G = "INSERT INTO Diary (Account, Category, Food, Calories, Protein, Fat, Carbs, MealType, Quantity, CreateTime) VALUES (@Account, @Category, @Food, @Calories, @Protein, @Fat, @Carbs, @MealType, @Quantity, @CreateTime)";
+
+        //        SqlCommand Q = new SqlCommand(G, X);
+        //        Q.Parameters.AddWithValue("@Account", account);
+        //        Q.Parameters.AddWithValue("@Category", Category);
+        //        Q.Parameters.AddWithValue("@Food", food);
+        //        Q.Parameters.AddWithValue("@Calories", calories);
+        //        Q.Parameters.AddWithValue("@Protein", protein);
+        //        Q.Parameters.AddWithValue("@Fat", fat);
+        //        Q.Parameters.AddWithValue("@Carbs", carbs);
+        //        Q.Parameters.AddWithValue("@MealType", MealType);
+        //        Q.Parameters.AddWithValue("@Quantity", quantity);
+        //        Q.Parameters.AddWithValue("@CreateTime", createTime);
+
+        //        Q.ExecuteNonQuery();
+        //        Response = "建立成功";
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        Response = "建立失敗：" + ex.Message;
+        //    }
+        //    finally
+        //    {
+        //        X.Close();
+        //    }
+        //    //TempData["Msg"] = Response;
+        //    return RedirectToAction("DiaryIndex");
+        //}
         public ActionResult DiaryIndex(string date)
         {
             DateTime selectedDate;

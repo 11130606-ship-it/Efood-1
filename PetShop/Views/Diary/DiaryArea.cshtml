@@ -6,13 +6,21 @@
     var commonFoods = ViewBag.CommonFoods as List<PetShop.Models.CommonFood>;
     bool isOther = false;
     string selectedDate = Request.QueryString["date"];
+
+    // Diary 預設為現在的日期時間
+    string diaryDateTimeValue = ViewBag.DiaryDate as string;
+    if (string.IsNullOrEmpty(diaryDateTimeValue))
+    {
+        diaryDateTimeValue = DateTime.Now.ToString("yyyy-MM-ddTHH:mm");
+        ViewBag.DiaryDate = diaryDateTimeValue;
+    }
+
     var diaryDate = !string.IsNullOrEmpty(selectedDate) ? selectedDate : DateTime.Today.ToString("yyyy-MM-dd");
 }
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
     html, body {
-        height: 100%;
         margin: 0;
     }
 
@@ -149,7 +157,7 @@
                 foreach (var dayGroup in groupedEntries)
                 {
                     <div class="diary-card">
-                        <h5 class="date-title">@dayGroup.Key.ToString("yyyy-MM-dd")</h5>
+                        <h4 class="date-title">@dayGroup.Key.ToString("yyyy-MM-dd")</h4>
                         @{
                             var meals = dayGroup
                                 .GroupBy(e => e.MealType)
@@ -249,6 +257,89 @@
                 margin-left: 10px;
             }
         </style>
+        <style>
+            .chip {
+                display: inline-flex;
+                align-items: center;
+                background: #e0f7fa;
+                border-radius: 16px;
+                padding: 4px 8px;
+                margin: 2px;
+                font-size: 16px;
+                gap: 6px;
+            }
+
+                .chip .chip-name {
+                    max-width: 160px;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+
+                .chip .chip-qty {
+                    width: 56px;
+                    padding: 2px 6px;
+                    border-radius: 6px;
+                    border: 1px solid #cfcfcf;
+                    font-size: 14px;
+                }
+
+            /* 清單定位與捲動 */
+            .chip-suggest-wrapper {
+                width: 100%;
+            }
+
+            .chip-suggest-list {
+                position: absolute;
+                top: calc(100% + 6px); /* 在輸入框下方 */
+                left: 0;
+                right: 0;
+                max-height: 220px; /* 超過高度出現滾動 */
+                overflow-y: auto;
+                background: #fff;
+                border-radius: 6px;
+                box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+                z-index: 1050;
+                padding: 0;
+            }
+
+                /* 每個項目強制一列顯示且占滿寬度 */
+                .chip-suggest-list .list-group-item {
+                    display: block !important; /* 強制區塊顯示（避免 bootstrap-inline 衝突） */
+                    width: 100% !important;
+                    box-sizing: border-box;
+                    padding: 8px 12px;
+                    white-space: nowrap; /* 同一列顯示，超過以省略號 */
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    cursor: pointer;
+                    border: none;
+                    border-bottom: 1px solid #eee;
+                }
+
+                    /* 最後一個項目去掉下邊線 */
+                    .chip-suggest-list .list-group-item:last-child {
+                        border-bottom: none;
+                    }
+
+            /* 建議：避免父容器 overflow:hidden 導致被裁切 */
+            .chip-suggest-wrapper, .form-group {
+                overflow: visible;
+            }
+
+            .chip .close {
+                margin-left: 8px;
+                color: #00796b;
+                cursor: pointer !important; /* 確保不被 Bootstrap 覆蓋 */
+                font-weight: bold;
+                user-select: none;
+            }
+
+                .chip .close:hover {
+                    color: #c62828; /* 可選：hover 顏色提示 */
+                    cursor: pointer !important;
+                }
+        </style>
 
     </div>
     <!-- 日記輸入表單(右側) -->
@@ -260,7 +351,7 @@
         }
 
         <div class="form-group">
-            <label for="diaryContent">請選擇常用食物：</label>
+            <label for="diaryContent">✎ 新增飲食紀錄:</label>
 
             <form id="dateForm" method="post" action="/Home/DiaryArea">
                 <label for="DiaryDate">飲食時間：</label>
@@ -278,60 +369,50 @@
                     </select>
                 </div>
                 <br />
-                @*<select id="foodSelect" name="Food" onchange="onFoodSelectChange()">
-                        <option value="">-- 請選擇食材 --</option>
-                        @if (foodList != null)
+
+                <div class="form-group">
+                    <label>食物搜尋：</label>
+
+                    <div class="chip-suggest-wrapper" style="position:relative;">
+                        <input type="text" id="foodChipInput" class="form-control" placeholder="輸入食物名稱..." autocomplete="off" onkeyup="chipSuggest()" />
+                        <div id="chipSuggestList" class="list-group chip-suggest-list" role="listbox" aria-label="建議清單"></div>
+                    </div>
+
+                    <div id="foodChipList" style="margin-top:10px;"></div>
+                    <input type="hidden" id="selectedFoods" name="CommonFood" />
+                </div>
+                <br />
+
+                @*<select id="commonSelect" name="CommonFood" onchange="onCommonSelectChange()">
+                        <option value="">-- 請選擇食物 --</option>
+                        @if (commonFoods != null)
                         {
-                            var groupedFoods = foodList.GroupBy(f => f.Category);
-                            foreach (var group in groupedFoods)
+                            var groupedCommon = commonFoods.GroupBy(f => f.Category);
+                            foreach (var group in groupedCommon)
                             {
                                 <optgroup label="@group.Key">
-                                    @foreach (var food in group)
+                                    @foreach (var common in group)
                                     {
-                                        <option value="@food.Name"
-                                                data-calories="@food.Calories"
-                                                data-protein="@food.Protein"
-                                                data-fat="@food.Fat"
-                                                data-carb="@food.Carbs">
-                                            @food.Name
+                                        <option value="@common.Name"
+                                                data-calories="@common.Calories"
+                                                data-protein="@common.Protein"
+                                                data-fat="@common.Fat"
+                                                data-carb="@common.Carbs">
+                                            @common.Name
                                         </option>
                                     }
                                 </optgroup>
                             }
                         }
                         <option value="其他" @(isOther ? "selected" : "")>其他</option>
-                    </select>*@
-
-                <select id="commonSelect" name="CommonFood" onchange="onCommonSelectChange()">
-                    <option value="">-- 請選擇食物 --</option>
-                    @if (commonFoods != null)
-                    {
-                        var groupedCommon = commonFoods.GroupBy(f => f.Category);
-                        foreach (var group in groupedCommon)
-                        {
-                            <optgroup label="@group.Key">
-                                @foreach (var common in group)
-                                {
-                                    <option value="@common.Name"
-                                            data-calories="@common.Calories"
-                                            data-protein="@common.Protein"
-                                            data-fat="@common.Fat"
-                                            data-carb="@common.Carbs">
-                                        @common.Name
-                                    </option>
-                                }
-                            </optgroup>
-                        }
-                    }
-                    <option value="其他" @(isOther ? "selected" : "")>其他</option>
-                </select>
-                <br />
-                <input type="text" id="foodOtherInput" name="FoodOther" class="form-control mt-2"
-                       style="display:none;" placeholder="請輸入食物名稱" />
-                <div>
+                    </select>
+                    <br />
+                    <input type="text" id="foodOtherInput" name="FoodOther" class="form-control mt-2"
+                           style="display:none;" placeholder="請輸入食物名稱" />*@
+                @*<div>
                     <label>數量</label>
                     <input type="number" id="qtyInput" name="Quantity" class="form-control d-inline-block" value="1" min="1" style="width:80px;" onchange="updateNutrition()">
-                </div>
+                </div>*@
                 <div id="nutritionInputs" class="mt-2">
                     <label>熱量</label>
                     <input type="number" id="caloriesInput" name="Calories" class="form-control d-inline-block" style="width:100px;" value="0" step="0.1">
@@ -354,56 +435,154 @@
 </div>
 
 <script>
-    //var ctx = document.getElementById("MyCanvas").getContext("2d");
-    //var MyData = {
-    //    type: "bar",
-    //    data: {
-    //        labels: ["熱量", "蛋白質", "脂肪", "碳水化合物"],
-    //        datasets: [{
-    //            label: "營養成分",
-    //            data: [],
-    //            backgroundColor: [
-    //                "rgba(75,192,192,0.6)",
-    //                "rgba(255,99,132,0.6)",
-    //                "rgba(255,206,86,0.6)",
-    //                "rgba(54,162,235,0.6)"
-    //            ]
-    //        }]
-    //    },
-    //    options: {
-    //        scales: {
-    //            y: { beginAtZero: true }
-    //        }
-    //    }
-    //};
-    //var MyChart = new Chart(ctx, MyData);
+var allFoods = [];
+@foreach (var food in commonFoods ?? new List<PetShop.Models.CommonFood>())
+{
+    <text>
+allFoods.push({
+    name: "@food.Name",
+    category: "@food.Category",
+    calories: "@food.Calories",
+    protein: "@food.Protein",
+    fat: "@food.Fat",
+    carb: "@food.Carbs"
+});
+    </text>
+}
 
-    //function showCalories() {
-    //    let select = document.getElementById("foodSelect");
-    //    let value = select.value;
-    //    let text = select.options[select.selectedIndex].text;
-    //    let protein = select.options[select.selectedIndex].getAttribute("data-protein");
-    //    let fat = select.options[select.selectedIndex].getAttribute("data-fat");
-    //    let carb = select.options[select.selectedIndex].getAttribute("data-carb");
+    var selectedChipFoods = [];
 
-    //    if (value) {
-    //        // 更新圖表
-    //        MyChart.data.labels = ["熱量", "蛋白質", "脂肪", "碳水化合物"];
-    //        MyChart.data.datasets[0].data = [value, protein, fat, carb];
-    //        MyChart.update();
+    function chipSuggest() {
+        var input = document.getElementById('foodChipInput').value.toLowerCase();
+        var suggestList = document.getElementById('chipSuggestList');
+        suggestList.innerHTML = "";
+        if (!input) return;
+        var filtered = allFoods.filter(f => f.name.toLowerCase().indexOf(input) > -1 && !selectedChipFoods.some(s => s.name === f.name));
+        filtered.slice(0, 8).forEach(function (f) {
+            var item = document.createElement('a');
+            item.className = "list-group-item list-group-item-action";
+            item.style.display = "block";
+            item.textContent = f.name;
+            item.onclick = function () {
+                // 安全取得預設數量；若不存在 qtyInput 則使用 1
+                var qtyEl = document.getElementById('qtyInput');
+                var defaultQty = qtyEl ? (parseInt(qtyEl.value) || 1) : 1;
+                addChipFood(Object.assign({}, f, { qty: defaultQty }));
+                document.getElementById('foodChipInput').value = "";
+                suggestList.innerHTML = "";
+            };
+            suggestList.appendChild(item);
+        });
+    }
 
-    //        // 把食物名稱存進隱藏欄位
-    //        document.getElementById("foodName").value = text;
-    //    } else {
-    //        document.getElementById("foodName").value = "";
-    //    }
-    //}
+    function addChipFood(food) {
+        if (selectedChipFoods.some(s => s.name === food.name)) return;
+        selectedChipFoods.push(food);
+        renderChipList();
+        updateNutritionSum();
+    }
 
-    //function onFoodSelectChange() {
-    //    var foodSelect = document.getElementById('foodSelect');
+    function removeChipFood(name) {
+        selectedChipFoods = selectedChipFoods.filter(f => f.name !== name);
+        renderChipList();
+        updateNutritionSum();
+    }
+
+    function renderChipList() {
+        var chipList = document.getElementById('foodChipList');
+        chipList.innerHTML = "";
+        selectedChipFoods.forEach(function (f, idx) {
+            var chip = document.createElement('span');
+            chip.className = "chip";
+            var nameSpan = document.createElement('span');
+            nameSpan.className = "chip-name";
+            nameSpan.textContent = f.name;
+            chip.appendChild(nameSpan);
+
+            // 數量輸入（每個 item 獨立）
+            var qtyInput = document.createElement('input');
+            qtyInput.type = "number";
+            qtyInput.min = "1";
+            qtyInput.value = f.qty || 1;
+            qtyInput.className = "chip-qty";
+            qtyInput.onchange = function () {
+                var v = parseInt(qtyInput.value) || 1;
+                // 更新陣列中的數量
+                selectedChipFoods[idx].qty = v;
+                updateNutritionSum();
+            };
+            chip.appendChild(qtyInput);
+
+            // 可選：顯示小型營養摘要（熱量）
+            var small = document.createElement('small');
+            small.style.marginLeft = "6px";
+            var cal = parseFloat(f.calories) || 0;
+            small.textContent = cal > 0 ? (cal * (f.qty || 1)) + " kcal" : "";
+            small.className = "chip-cal";
+            chip.appendChild(small);
+
+            // close 按鈕
+            var close = document.createElement('span');
+            close.className = "close";
+            close.textContent = "×";
+            close.onclick = function () { removeChipFood(f.name); };
+            chip.appendChild(close);
+
+            chipList.appendChild(chip);
+        });
+
+        // 更新隱藏欄位（格式: name:qty,name2:qty2）
+        var hidden = document.getElementById('selectedFoods');
+        if (hidden) {
+            hidden.value = selectedChipFoods.map(f => f.name + ":" + (f.qty || 1)).join(',');
+        }
+    }
+
+    function updateNutritionSum() {
+        var sumCalories = 0, sumProtein = 0, sumFat = 0, sumCarb = 0;
+        selectedChipFoods.forEach(function (f) {
+            var qty = parseInt(f.qty) || 1;
+            sumCalories += (parseFloat(f.calories) || 0) * qty;
+            sumProtein += (parseFloat(f.protein) || 0) * qty;
+            sumFat += (parseFloat(f.fat) || 0) * qty;
+            sumCarb += (parseFloat(f.carb) || 0) * qty;
+        });
+
+        var calEl = document.getElementById('caloriesInput');
+        var proteinEl = document.getElementById('proteinInput');
+        var fatEl = document.getElementById('fatInput');
+        var carbEl = document.getElementById('carbInput');
+
+        if (calEl) calEl.value = Math.round(sumCalories * 10) / 10;
+        if (proteinEl) proteinEl.value = Math.round(sumProtein * 10) / 10;
+        if (fatEl) fatEl.value = Math.round(sumFat * 10) / 10;
+        if (carbEl) carbEl.value = Math.round(sumCarb * 10) / 10;
+
+        // 更新每個 chip 顯示的 kcal（如果 render 時顯示）
+        var chips = document.querySelectorAll('#foodChipList .chip');
+        chips.forEach(function (chip, i) {
+            var small = chip.querySelector('.chip-cal');
+            if (small) {
+                var f = selectedChipFoods[i];
+                var cal = parseFloat(f.calories) || 0;
+                small.textContent = cal > 0 ? (cal * (f.qty || 1)) + " kcal" : "";
+            }
+        });
+
+        // 同步隱藏欄位（確保送出時為最新）
+        var hidden = document.getElementById('selectedFoods');
+        if (hidden) hidden.value = selectedChipFoods.map(f => f.name + ":" + (f.qty || 1)).join(',');
+    }
+
+/*    document.getElementById('qtyInput').addEventListener('change', updateNutritionSum);*/
+</script>
+
+<script>
+    //function onCommonSelectChange() {
+    //    var commonSelect = document.getElementById('commonSelect');
     //    var foodOtherInput = document.getElementById('foodOtherInput');
-    //    var selected = foodSelect.options[foodSelect.selectedIndex];
-    //    if (foodSelect.value === "其他") {
+    //    var selected = commonSelect.options[commonSelect.selectedIndex];
+    //    if (commonSelect.value === "其他") {
     //        foodOtherInput.style.display = '';
     //        foodOtherInput.required = true;
     //    } else {
@@ -412,48 +591,20 @@
     //    }
     //}
 
-    function onCommonSelectChange() {
-        var commonSelect = document.getElementById('commonSelect');
-        var foodOtherInput = document.getElementById('foodOtherInput');
-        var selected = commonSelect.options[commonSelect.selectedIndex];
-        if (commonSelect.value === "其他") {
-            foodOtherInput.style.display = '';
-            foodOtherInput.required = true;
-        } else {
-            foodOtherInput.style.display = 'none';
-            foodOtherInput.required = false;
-        }
-    }
-
-    //document.getElementById('foodSelect').addEventListener('change', function () {
+    //document.getElementById('commonSelect').addEventListener('change', function () {
     //    var selected = this.options[this.selectedIndex];
     //    var category = selected.parentElement.label;
     //    var calories = selected.getAttribute('data-calories');
     //    var protein = selected.getAttribute('data-protein');
     //    var fat = selected.getAttribute('data-fat');
     //    var carb = selected.getAttribute('data-carb');
-    //    if (calories && selected.value !== "其他") {
+    //    if (calories && calories !== "其他") {
     //        document.getElementById('caloriesInput').value = calories;
     //        document.getElementById('proteinInput').value = protein;
     //        document.getElementById('fatInput').value = fat;
     //        document.getElementById('carbInput').value = carb;
     //    }
     //});
-
-    document.getElementById('commonSelect').addEventListener('change', function () {
-        var selected = this.options[this.selectedIndex];
-        var category = selected.parentElement.label;
-        var calories = selected.getAttribute('data-calories');
-        var protein = selected.getAttribute('data-protein');
-        var fat = selected.getAttribute('data-fat');
-        var carb = selected.getAttribute('data-carb');
-        if (calories && calories !== "其他") {
-            document.getElementById('caloriesInput').value = calories;
-            document.getElementById('proteinInput').value = protein;
-            document.getElementById('fatInput').value = fat;
-            document.getElementById('carbInput').value = carb;
-        }
-    });
 
     function deleteDiary(id, btn) {
         console.log("前端傳入的 id:", id);
@@ -473,29 +624,101 @@
                 }
             });
     }
-    function updateNutrition() {
-        // 取得選擇的食材
-        var select = document.getElementById('commonSelect');
-        var qty = parseInt(document.getElementById('qtyInput').value) || 1;
-        var selected = select.options[select.selectedIndex];
 
-        var calories = parseFloat(selected.getAttribute('data-calories')) || 0;
-        var protein = parseFloat(selected.getAttribute('data-protein')) || 0;
-        var fat = parseFloat(selected.getAttribute('data-fat')) || 0;
-        var carb = parseFloat(selected.getAttribute('data-carb')) || 0;
+    (function () {
+        // 如果使用者手動選過餐別，不再自動覆蓋
+        var userPickedMeal = false;
 
-        // 乘上數量
-        document.getElementById('caloriesInput').value = calories * qty;
-        document.getElementById('proteinInput').value = protein * qty;
-        document.getElementById('fatInput').value = fat * qty;
-        document.getElementById('carbInput').value = carb * qty;
+        function parseLocalDateTime(value) {
+            if (!value) return null;
+            // 支援 "yyyy-MM-ddTHH:mm" 格式
+            var parts = value.split('T');
+            if (parts.length !== 2) {
+                var d = new Date(value);
+                return isNaN(d.getTime()) ? null : d;
+            }
+            var date = parts[0].split('-');
+            var time = parts[1].split(':');
+            var year = parseInt(date[0], 10);
+            var month = parseInt(date[1], 10) - 1;
+            var day = parseInt(date[2], 10);
+            var hour = parseInt(time[0] || '0', 10);
+            var minute = parseInt(time[1] || '0', 10);
+            return new Date(year, month, day, hour, minute);
+        }
 
-        // 若要送到後端，可將結果填入隱藏欄位
-        document.getElementById('caloriesInput').value = totalCalories;
-        // 其他營養成分也可用隱藏欄位傳送
-    }
+        function inferMealTypeFromDate(date) {
+            if (!date) return '點心';
+            var h = date.getHours();
+            // 可按需求調整區間
+            if (h >= 5 && h < 11) return '早餐';    // 05:00 - 10:59
+            if (h >= 11 && h < 15) return '午餐';  // 11:00 - 14:59
+            if (h >= 17 && h < 21) return '晚餐';  // 17:00 - 20:59
+            return '點心';
+        }
 
-    // 初始化
-    document.getElementById('commonSelect').addEventListener('change', updateNutritionInputs);
-    document.getElementById('qtyInput').addEventListener('change', updateNutritionInputs);
+        function applyInferredMeal() {
+            var dtInput = document.getElementById('selectedDateTime');
+            var mealSelect = document.getElementById('MealType');
+            if (!dtInput || !mealSelect) return;
+            if (userPickedMeal) return; // 若使用者已手動選過則不自動覆蓋
+            var dt = parseLocalDateTime(dtInput.value);
+            var inferred = inferMealTypeFromDate(dt);
+            // 只有在 select 為空或為預設值時自動設
+            if (!mealSelect.value || mealSelect.value.trim() === '') {
+                mealSelect.value = inferred;
+            } else {
+                // 若你希望每次時間改變都強制更新，可取消上面 userPickedMeal 判斷並直接設定：
+                // mealSelect.value = inferred;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            var dtInput = document.getElementById('selectedDateTime');
+            var mealSelect = document.getElementById('MealType');
+            if (!dtInput || !mealSelect) return;
+
+            // 若使用者改變 select，標記為手動選擇
+            mealSelect.addEventListener('change', function () {
+                if (mealSelect.value && mealSelect.value.trim() !== '') {
+                    userPickedMeal = true;
+                }
+            });
+
+            // 當時間即時改變（typing / picker）時觸發推論
+            dtInput.addEventListener('input', applyInferredMeal);
+            // 也綁 change（某些瀏覽器在 picker 完成時只觸發 change）
+            dtInput.addEventListener('change', applyInferredMeal);
+
+            // 初始載入時套用一次（若尚未手動選）
+            applyInferredMeal();
+        });
+    })();
+
+    //function updateNutrition() {
+    //    // 取得選擇的食材
+    //    var select = document.getElementById('commonSelect');
+    //    var qty = parseInt(document.getElementById('qtyInput').value) || 1;
+    //    var selected = select.options[select.selectedIndex];
+
+    //    var calories = parseFloat(selected.getAttribute('data-calories')) || 0;
+    //    var protein = parseFloat(selected.getAttribute('data-protein')) || 0;
+    //    var fat = parseFloat(selected.getAttribute('data-fat')) || 0;
+    //    var carb = parseFloat(selected.getAttribute('data-carb')) || 0;
+
+    //    // 乘上數量
+    //    document.getElementById('caloriesInput').value = calories * qty;
+    //    document.getElementById('proteinInput').value = protein * qty;
+    //    document.getElementById('fatInput').value = fat * qty;
+    //    document.getElementById('carbInput').value = carb * qty;
+
+    //    // 若要送到後端，可將結果填入隱藏欄位
+    //    document.getElementById('caloriesInput').value = totalCalories;
+    //    // 其他營養成分也可用隱藏欄位傳送
+    //}
+
+    //// 初始化
+    //document.getElementById('commonSelect').addEventListener('change', updateNutritionInputs);
+    //document.getElementById('qtyInput').addEventListener('change', updateNutritionInputs);
+
 </script>
