@@ -164,7 +164,7 @@
     </div>
 
     <!-- 右半：選單與七天紀錄 -->
-    <div style="flex: 1; padding: 30px; padding-top: 90px; overflow-y: auto;">
+    <div style="flex: 1; padding: 30px; padding-top: 90px; overflow-y: auto; ">
         <!-- 頁面跳轉選單 -->
         <div style="margin-bottom: 20px;">
             <select id="pageSelect" style="width: 450px;">
@@ -186,7 +186,7 @@
 
         <!-- 七天紀錄 -->
         <h3>近七天餐點記錄</h3>
-        <ul style="font-size: 18px; list-style: none; padding-left: 0;">
+        <ul style="font-size: 18px; list-style: none; padding-left: 0; background-color: #f0eeec; border-radius: 8px; ">
             @if (weekData != null && weekData.Count > 0)
             {
                 foreach (var item in weekData)
