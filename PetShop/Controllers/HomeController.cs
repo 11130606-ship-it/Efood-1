@@ -1510,7 +1510,7 @@ namespace PetShop.Controllers
             // 寄信
             try
             {
-                string subject = "密碼重設通知 - Efood";
+                string subject = "密碼重設通知 - efood";
                 string body = $@"<p>您好，</p>
                                 <p>請點擊下列連結重設密碼（30 分鐘內有效）：</p>
                                 <p><a href=""{resetLink}"">重設密碼</a></p>
@@ -1553,7 +1553,7 @@ namespace PetShop.Controllers
 
                 using (var msg = new MailMessage())
                 {
-                    msg.From = new MailAddress("11130305@me.mcu.edu.tw", "E-Food 系統通知");
+                    msg.From = new MailAddress("noreplyefood1113@gmail.com", "E-Food 系統通知");
                     msg.To.Add(to);
                     msg.Subject = subject;
                     msg.Body = body;
@@ -1577,7 +1577,7 @@ namespace PetShop.Controllers
                         //client.Send(msg);
 
                         client.EnableSsl = true;
-                        client.Credentials = new NetworkCredential("11130305@me.mcu.edu.tw", "gakepvpfhtdfliec");
+                        client.Credentials = new NetworkCredential("noreplyefood1113@gmail.com", "jppcvlfgsrplufss");
                         client.Timeout = 20000;
                         client.Send(msg);
                     }
