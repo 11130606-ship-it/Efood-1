@@ -25,7 +25,7 @@ namespace PetShop.Controllers
     {
         private readonly IGeminiAnalysisService _geminiService = new GeminiAnalysisService();
 
-        public SqlConnection X = new SqlConnection(@"Data Source=(LocalDB)\MSSQLLocalDB;AttachDbFilename=C:\efood\PetShop\App_Data\FoodDB.mdf;Integrated Security=True");
+        public SqlConnection X = new SqlConnection(@"Data Source=(LocalDB)\MSSQLLocalDB;AttachDbFilename=C:\Users\Vivobook_15\source\repos\efood1017\PetShop\App_Data\FoodDB.mdf;Integrated Security=True");
         public MyDbContext db = new MyDbContext();
         public string Result2 { get; set; }
         //修改會員資料
@@ -375,7 +375,7 @@ namespace PetShop.Controllers
         public ActionResult Logout()
         {
             Session["LoginUser"] = null;
-            return View("~/Views/Home/Index.cshtml");
+            return View("~/Views/Home/LoginRegister.cshtml");
         }
         [HttpPost]
         public ActionResult DiaryArea()
