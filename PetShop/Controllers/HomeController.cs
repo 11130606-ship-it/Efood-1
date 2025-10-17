@@ -15,6 +15,9 @@ using System.Threading.Tasks;
 using System.Web.Mvc;
 using System.Web.Services.Description;
 using System.Web.UI.WebControls;
+using System.Net;
+using System.Net.Mail;
+using System.Configuration;
 
 namespace PetShop.Controllers
 {
@@ -1035,7 +1038,7 @@ namespace PetShop.Controllers
             }
 
             // 取得當日飲食加總熱量
-            decimal totalCalories = 0; 
+            decimal totalCalories = 0;
             try
             {
                 X.Open();
@@ -1283,67 +1286,67 @@ namespace PetShop.Controllers
             return View("~/Views/Diary/Analysis2Area.cshtml");
         }
         public ActionResult Analysis3Index(string selectedDate)
-{
-    string account = Session["LoginUser"]?.ToString();
-    ViewBag.Account = account;
-
-    // 設定近七天日期和營養比例數據
-    DateTime startDate = string.IsNullOrEmpty(selectedDate) ? DateTime.Today : DateTime.Parse(selectedDate);
-    Dictionary<string, string> weekData = new Dictionary<string, string>();
-    decimal totalCarbs = 0, totalFat = 0, totalProtein = 0;
-
-    try
-    {
-        X.Open();
-        for (int i = 0; i < 7; i++)
         {
-            DateTime currentDate = startDate.AddDays(-6 + i);
+            string account = Session["LoginUser"]?.ToString();
+            ViewBag.Account = account;
 
-            // 查詢當日餐點記錄並計算營養總和
-            string sql = @"
+            // 設定近七天日期和營養比例數據
+            DateTime startDate = string.IsNullOrEmpty(selectedDate) ? DateTime.Today : DateTime.Parse(selectedDate);
+            Dictionary<string, string> weekData = new Dictionary<string, string>();
+            decimal totalCarbs = 0, totalFat = 0, totalProtein = 0;
+
+            try
+            {
+                X.Open();
+                for (int i = 0; i < 7; i++)
+                {
+                    DateTime currentDate = startDate.AddDays(-6 + i);
+
+                    // 查詢當日餐點記錄並計算營養總和
+                    string sql = @"
                 SELECT d.Food, d.Calories, d.Carbs, d.Fat, d.Protein 
                 FROM Diary d 
                 WHERE d.Account = @Account AND CONVERT(date, d.CreateTime) = @Date";
-            SqlCommand cmd = new SqlCommand(sql, X);
-            cmd.Parameters.AddWithValue("@Account", account);
-            cmd.Parameters.AddWithValue("@Date", currentDate.Date);
-            SqlDataReader reader = cmd.ExecuteReader();
+                    SqlCommand cmd = new SqlCommand(sql, X);
+                    cmd.Parameters.AddWithValue("@Account", account);
+                    cmd.Parameters.AddWithValue("@Date", currentDate.Date);
+                    SqlDataReader reader = cmd.ExecuteReader();
 
-            string mealDetails = "";
-            while (reader.Read())
-            {
-                string food = reader["Food"]?.ToString() ?? "未知餐點";
-                int calories = reader["Calories"] != DBNull.Value ? Convert.ToInt32(reader["Calories"]) : 0;
-                decimal carbs = reader["Carbs"] != DBNull.Value ? Convert.ToDecimal(reader["Carbs"]) : 0;
-                decimal fat = reader["Fat"] != DBNull.Value ? Convert.ToDecimal(reader["Fat"]) : 0;
-                decimal protein = reader["Protein"] != DBNull.Value ? Convert.ToDecimal(reader["Protein"]) : 0;
+                    string mealDetails = "";
+                    while (reader.Read())
+                    {
+                        string food = reader["Food"]?.ToString() ?? "未知餐點";
+                        int calories = reader["Calories"] != DBNull.Value ? Convert.ToInt32(reader["Calories"]) : 0;
+                        decimal carbs = reader["Carbs"] != DBNull.Value ? Convert.ToDecimal(reader["Carbs"]) : 0;
+                        decimal fat = reader["Fat"] != DBNull.Value ? Convert.ToDecimal(reader["Fat"]) : 0;
+                        decimal protein = reader["Protein"] != DBNull.Value ? Convert.ToDecimal(reader["Protein"]) : 0;
 
-                mealDetails += $"{food} ({calories} kcal), ";
-                totalCarbs += carbs;
-                totalFat += fat;
-                totalProtein += protein;
+                        mealDetails += $"{food} ({calories} kcal), ";
+                        totalCarbs += carbs;
+                        totalFat += fat;
+                        totalProtein += protein;
+                    }
+                    reader.Close();
+                    weekData[currentDate.ToString("yyyy-MM-dd")] = string.IsNullOrEmpty(mealDetails) ? "無記錄" : mealDetails.TrimEnd(',', ' ');
+                }
             }
-            reader.Close();
-            weekData[currentDate.ToString("yyyy-MM-dd")] = string.IsNullOrEmpty(mealDetails) ? "無記錄" : mealDetails.TrimEnd(',', ' ');
+            catch (Exception ex)
+            {
+                ViewBag.Error = "無法載入數據：" + ex.Message;
+            }
+            finally
+            {
+                X.Close();
+            }
+
+            // 設定圓餅圖數據
+            ViewBag.Labels = new string[] { "碳水化合物", "脂肪", "蛋白質" };
+            ViewBag.Values = new decimal[] { totalCarbs, totalFat, totalProtein };
+            ViewBag.WeekData = weekData;
+            ViewBag.SelectedDate = startDate.ToString("yyyy-MM-dd");
+
+            return View("~/Views/Diary/Analysis3Area.cshtml");
         }
-    }
-    catch (Exception ex)
-    {
-        ViewBag.Error = "無法載入數據：" + ex.Message;
-    }
-    finally
-    {
-        X.Close();
-    }
-
-    // 設定圓餅圖數據
-    ViewBag.Labels = new string[] { "碳水化合物", "脂肪", "蛋白質" };
-    ViewBag.Values = new decimal[] { totalCarbs, totalFat, totalProtein };
-    ViewBag.WeekData = weekData;
-    ViewBag.SelectedDate = startDate.ToString("yyyy-MM-dd");
-
-    return View("~/Views/Diary/Analysis3Area.cshtml");
-}
 
         public ActionResult MealIndex(string date)
         {
@@ -1504,8 +1507,90 @@ namespace PetShop.Controllers
 
             var resetLink = Url.Action("ResetPassword", "Home", new { token = token }, Request.Url.Scheme);
 
-            // 實際環境應用 Email 寄送，這裡先用 TempData 模擬
-            return RedirectToAction("ResetPassword", new { token = token });
+            // 寄信
+            try
+            {
+                string subject = "密碼重設通知 - Efood";
+                string body = $@"<p>您好，</p>
+                                <p>請點擊下列連結重設密碼（30 分鐘內有效）：</p>
+                                <p><a href=""{resetLink}"">重設密碼</a></p>
+                                <p>若非您本人操作，請忽略此信。</p>";
+                SendEmail(user.Account, subject, body);
+                TempData["Note"] = "重設連結已寄到您的信箱，請查收。";
+            }
+            catch (Exception ex)
+            {
+                TempData["Note"] = "發送 Email 失敗：" + ex.Message;
+            }
+
+            return RedirectToAction("ForgotPassword");
+        }
+
+        // Helper: 從 Web.config 讀 SMTP 設定並發送 Email
+        // Helper: 使用 system.net/mailSettings 並以 SmtpClient() 讀取設定
+        private void SendEmail(string to, string subject, string body)
+        {
+            try
+            {
+                // 強制使用 TLS1.2（避免因預設協定被拒）
+                System.Net.ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
+
+                // 先嘗試讀 system.net/mailSettings/smtp，若沒有再 fallback 到 appSettings
+                var smtpSection = ConfigurationManager.GetSection("system.net/mailSettings/smtp") as System.Net.Configuration.SmtpSection;
+                string from = smtpSection?.From ?? ConfigurationManager.AppSettings["SmtpFrom"] ?? "no-reply@example.com";
+
+                string host = smtpSection?.Network?.Host ?? ConfigurationManager.AppSettings["SmtpHost"];
+                int port = 25;
+                if (smtpSection != null && smtpSection.Network.Port > 0) port = smtpSection.Network.Port;
+                else if (!string.IsNullOrEmpty(ConfigurationManager.AppSettings["SmtpPort"]))
+                    int.TryParse(ConfigurationManager.AppSettings["SmtpPort"], out port);
+
+                bool enableSsl = false;
+                bool.TryParse(ConfigurationManager.AppSettings["SmtpEnableSsl"], out enableSsl);
+
+                string user = smtpSection?.Network?.UserName ?? ConfigurationManager.AppSettings["SmtpUser"];
+                string pass = smtpSection?.Network?.Password ?? ConfigurationManager.AppSettings["SmtpPass"];
+
+                using (var msg = new MailMessage())
+                {
+                    msg.From = new MailAddress("11130305@me.mcu.edu.tw", "E-Food 系統通知");
+                    msg.To.Add(to);
+                    msg.Subject = subject;
+                    msg.Body = body;
+                    msg.IsBodyHtml = true;
+
+                    using (var client = new SmtpClient("smtp.gmail.com", 587))
+                    {
+                        //// 若 system.net 未設定 host/port，再明確指定
+                        //if (!string.IsNullOrEmpty(host)) client.Host = host;
+                        //client.Port = port;
+                        //client.EnableSsl = enableSsl;
+
+                        //if (!string.IsNullOrEmpty(user))
+                        //{
+                        //    client.Credentials = new NetworkCredential(user, pass);
+                        //}
+
+                        //// 加長 timeout（可選）
+                        //client.Timeout = 20000;
+
+                        //client.Send(msg);
+
+                        client.EnableSsl = true;
+                        client.Credentials = new NetworkCredential("11130305@me.mcu.edu.tw", "gakepvpfhtdfliec");
+                        client.Timeout = 20000;
+                        client.Send(msg);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // 記錄完整錯誤（方便除錯），可以改成 logger 或寫入 EventLog
+                Debug.WriteLine("SendEmail 錯誤: " + ex.ToString());
+                // 若要顯示給使用者，請只呈現友善訊息，內部用 log 保存詳細例外
+                TempData["Note"] = "發送 Email 失敗，請聯絡管理員或稍後重試。";
+                throw; // 或不拋出，視你的流程處理
+            }
         }
         public ActionResult ResetPassword(string token)
         {
@@ -1770,4 +1855,3 @@ namespace PetShop.Controllers
         }
     }
 }
-    
