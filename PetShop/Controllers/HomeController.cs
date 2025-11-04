@@ -23,6 +23,7 @@ namespace PetShop.Controllers
 {
     public class HomeController : Controller
     {
+<<<<<<< HEAD
         private readonly IGeminiAnalysisService _geminiService = new GeminiAnalysisService();
 
         public SqlConnection X = new SqlConnection(@"Data Source=(LocalDB)\MSSQLLocalDB;AttachDbFilename=C:\Users\User\source\repos\efood\PetShop\App_Data\FoodDB.mdf;Integrated Security=True");
@@ -1265,6 +1266,7 @@ namespace PetShop.Controllers
             return View("~/Views/Diary/Analysis2Area.cshtml");
         }
         public ActionResult Analysis3Index(string selectedDate)
+<<<<<<< HEAD
         {
             string account = Session["LoginUser"]?.ToString();
             ViewBag.Account = account;
@@ -1325,7 +1327,69 @@ namespace PetShop.Controllers
             ViewBag.SelectedDate = startDate.ToString("yyyy-MM-dd");
 
             return View("~/Views/Diary/Analysis3Area.cshtml");
+=======
+{
+    string account = Session["LoginUser"]?.ToString();
+    ViewBag.Account = account;
+
+    // 設定近七天日期和營養比例數據
+    DateTime startDate = string.IsNullOrEmpty(selectedDate) ? DateTime.Today : DateTime.Parse(selectedDate);
+    Dictionary<string, string> weekData = new Dictionary<string, string>();
+    decimal totalCarbs = 0, totalFat = 0, totalProtein = 0;
+
+    try
+    {
+        X.Open();
+        for (int i = 0; i < 7; i++)
+        {
+            DateTime currentDate = startDate.AddDays(-6 + i);
+
+            // 查詢當日餐點記錄並計算營養總和
+            string sql = @"
+                SELECT d.Food, d.Calories, d.Carbs, d.Fat, d.Protein 
+                FROM Diary d 
+                WHERE d.Account = @Account AND CONVERT(date, d.CreateTime) = @Date";
+            SqlCommand cmd = new SqlCommand(sql, X);
+            cmd.Parameters.AddWithValue("@Account", account);
+            cmd.Parameters.AddWithValue("@Date", currentDate.Date);
+            SqlDataReader reader = cmd.ExecuteReader();
+
+            string mealDetails = "";
+            while (reader.Read())
+            {
+                string food = reader["Food"]?.ToString() ?? "未知餐點";
+                int calories = reader["Calories"] != DBNull.Value ? Convert.ToInt32(reader["Calories"]) : 0;
+                decimal carbs = reader["Carbs"] != DBNull.Value ? Convert.ToDecimal(reader["Carbs"]) : 0;
+                decimal fat = reader["Fat"] != DBNull.Value ? Convert.ToDecimal(reader["Fat"]) : 0;
+                decimal protein = reader["Protein"] != DBNull.Value ? Convert.ToDecimal(reader["Protein"]) : 0;
+
+                mealDetails += $"{food} ({calories} kcal), ";
+                totalCarbs += carbs;
+                totalFat += fat;
+                totalProtein += protein;
+            }
+            reader.Close();
+            weekData[currentDate.ToString("yyyy-MM-dd")] = string.IsNullOrEmpty(mealDetails) ? "無記錄" : mealDetails.TrimEnd(',', ' ');
+>>>>>>> 200b2080cff6b916e9f02103892ecc0c3784a230
         }
+    }
+    catch (Exception ex)
+    {
+        ViewBag.Error = "無法載入數據：" + ex.Message;
+    }
+    finally
+    {
+        X.Close();
+    }
+
+    // 設定圓餅圖數據
+    ViewBag.Labels = new string[] { "碳水化合物", "脂肪", "蛋白質" };
+    ViewBag.Values = new decimal[] { totalCarbs, totalFat, totalProtein };
+    ViewBag.WeekData = weekData;
+    ViewBag.SelectedDate = startDate.ToString("yyyy-MM-dd");
+
+    return View("~/Views/Diary/Analysis3Area.cshtml");
+}
 
         public ActionResult MealIndex(string date)
         {
@@ -1423,7 +1487,7 @@ namespace PetShop.Controllers
                     user = new Member()
                     {
                         Account = reader["Account"].ToString(),
-                        Password = reader["Password"].ToString(),
+                        PasswordHash = reader["Password"].ToString(),
                         RealName = reader["RealName"].ToString(),
                         Phone = reader["Phone"].ToString(),
                         BirthDay = reader["BirthDay"].ToString(),
@@ -1601,6 +1665,11 @@ namespace PetShop.Controllers
                 TempData["Note"] = "驗證失敗：" + ex.Message;
                 return RedirectToAction("LoginRegister");
             }
+            catch (Exception ex)
+            {
+                TempData["Note"] = "驗證失敗：" + ex.Message;
+                return RedirectToAction("LoginRegister");
+            }
             finally
             {
                 X.Close();
@@ -1610,6 +1679,7 @@ namespace PetShop.Controllers
             ViewBag.Token = token;
             return View();  // 顯示 ResetPassword.cshtml
         }
+
         [HttpPost]
         public ActionResult ResetPassword(string token, string newPassword, string confirmPassword)
         {
