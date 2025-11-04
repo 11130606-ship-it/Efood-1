@@ -159,12 +159,14 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="App_Start\BundleConfig.cs" />
+    <Compile Include="App_Start\BundleConfig2.cs" />
     <Compile Include="App_Start\FilterConfig.cs" />
     <Compile Include="App_Start\RouteConfig.cs" />
     <Compile Include="Controllers\HomeController.cs" />
     <Compile Include="Global.asax.cs">
       <DependentUpon>Global.asax</DependentUpon>
     </Compile>
+    <Compile Include="Helpers\PasswordHelper.cs" />
     <Compile Include="Models\CommonFood.cs" />
     <Compile Include="Models\DbContext.cs" />
     <Compile Include="Models\DiaryEntry.cs" />
@@ -259,7 +261,8 @@
     <Content Include="Views\Diary\ObjectiveArea.cshtml" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Photo\" />
+    <Folder Include="Data\" />
+    <Folder Include="Views\PasswordHelper\" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Content\bootstrap.rtl.min.css.map" />
