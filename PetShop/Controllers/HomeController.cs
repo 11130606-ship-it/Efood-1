@@ -1596,11 +1596,7 @@ namespace PetShop.Controllers
                     return RedirectToAction("LoginRegister");
                 }
             }
-            catch (Exception ex)
-            {
-                TempData["Note"] = "驗證失敗：" + ex.Message;
-                return RedirectToAction("LoginRegister");
-            }
+            
             catch (Exception ex)
             {
                 TempData["Note"] = "驗證失敗：" + ex.Message;

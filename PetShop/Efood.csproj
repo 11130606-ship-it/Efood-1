@@ -260,6 +260,7 @@
     <Content Include="Views\Diary\ObjectiveArea.cshtml" />
   </ItemGroup>
   <ItemGroup>
+    <Folder Include="Photo\" />
     <Folder Include="Views\PasswordHelper\" />
   </ItemGroup>
   <ItemGroup>
